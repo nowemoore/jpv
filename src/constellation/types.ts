@@ -12,7 +12,7 @@ export interface GraphNode {
 /** A group of orgs laid out together around an invisible centre, sharing a label colour. */
 export interface GraphCluster {
   id: string;
-  /** Name of the CSS custom property holding this group's colour, e.g. "--cluster-evals". */
+  /** Name of the CSS custom property holding this group's colour, e.g. "--cluster-nonprofit". */
   colorVar: string;
   children: GraphNode[];
 }

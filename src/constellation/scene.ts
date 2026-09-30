@@ -13,6 +13,14 @@ export interface Constellation {
   setSelected(id: string | null): void;
   /** Restore the home camera and resume the idle drift. */
   recentre(): void;
+  /**
+   * Pixels of the canvas covered by an overlay (the side panel on the right,
+   * or a bottom sheet). The view re-centres on the uncovered area, animating
+   * alongside the overlay, without resizing the canvas.
+   */
+  setInsets(right: number, bottom: number): void;
+  /** Fade out every org in these groups (and their links); others fade back in. */
+  setHiddenGroups(ids: string[], instant?: boolean): void;
   dispose(): void;
 }
 
@@ -22,24 +30,39 @@ const BASE_FOV = 42;
 /** On portrait screens the vertical FOV widens up to this, so the graph isn't cropped at the sides. */
 const MAX_FOV = 70;
 const GOLDEN_ANGLE = 2.399963;
-const NODE_RADIUS = 2.6;
+/** Radius of the sphere a group's orgs sit on: grows with the group so big groups aren't crowded. */
+const groupRadius = (count: number) => Math.max(2.2, 0.85 * Math.sqrt(count));
 /** Radius around the selected org that must stay in view: most of its group. */
 const FOCUS_RADIUS = 3.6;
 const SELECTED_SCALE = 1.15;
+const LINK_OPACITY = 0.55;
 /** Opacity multiplier for every other label while one is selected. */
 const UNSELECTED_DIM = 0.45;
 const TWEEN_MS = 1100;
+/** How far each chip drifts from its home position, in world units. */
+const BOB_AMPLITUDE = 0.22;
+/** Multiplier on the drift speed: lower is calmer. */
+const BOB_SPEED = 0.5;
+/** Fade time when a group is hidden or shown. */
+const FADE_MS = 350;
+/** Matches the panel's CSS slide: 0.45s, cubic-bezier(0.65, 0, 0.35, 1) (ease-in-out cubic). */
+const INSET_MS = 450;
 const CLICK_SLOP_PX = 4;
 
 /** An org. Its label bubble is the node: there is no marker shape. */
 interface NodeRecord {
   id: string;
+  group: string;
   clickable: boolean;
   label: THREE.Sprite;
   baseScale: THREE.Vector3;
   baseOpacity: number;
   base: THREE.Vector3;
   phase: number;
+  /** Per-axis speed multipliers, so chips drift independently rather than in step. */
+  speed: THREE.Vector3;
+  /** 1 = fully shown, 0 = hidden by a group filter; animated between. */
+  shown: number;
   /** Half the bubble's width and height in world units at scale 1, excluding the shadow margin. */
   bubbleHalf: THREE.Vector2;
 }
@@ -245,7 +268,7 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
     const geo = track(new THREE.BufferGeometry());
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const mat = track(
-      new THREE.LineDashedMaterial({ color, transparent: true, opacity: 0.55, dashSize: 0.05, gapSize: 0.04 }),
+      new THREE.LineDashedMaterial({ color, transparent: true, opacity: LINK_OPACITY, dashSize: 0.05, gapSize: 0.04 }),
     );
     const line = new THREE.Line(geo, mat);
     scene.add(line);
@@ -270,7 +293,8 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
   const ringRadius = 4.6 + clusters.length * 0.35;
   clusters.forEach((cluster, i) => {
     const colorCss = cssVar(cluster.colorVar) || colors.ink;
-    const angle = (i / Math.max(clusters.length, 1)) * Math.PI * 2 - Math.PI / 4;
+    // Offset so the first groups in the list start nearest the camera.
+    const angle = (i / Math.max(clusters.length, 1)) * Math.PI * 2 + Math.PI / 4;
     const centre = new THREE.Vector3(
       Math.cos(angle) * ringRadius,
       Math.sin(i * 2.3 + 0.7) * 0.9,
@@ -281,12 +305,13 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
     // pushed slightly outward from the origin so groups don't crowd the middle.
     const outward = centre.clone().setY(0).normalize().multiplyScalar(0.45);
     const n = cluster.children.length;
+    const spread = groupRadius(n);
     cluster.children.forEach((node, j) => {
       const y = 1 - ((j + 0.5) / n) * 2;
       const r = Math.sqrt(1 - y * y);
       const theta = j * GOLDEN_ANGLE + i;
       const base = new THREE.Vector3(Math.cos(theta) * r, y, Math.sin(theta) * r)
-        .multiplyScalar(NODE_RADIUS)
+        .multiplyScalar(spread)
         .add(centre)
         .add(outward);
 
@@ -296,15 +321,23 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
       label.userData.id = node.id;
       scene.add(label);
 
+      const phase = (i * 7 + j) * 1.618;
+      const rand = (seed: number) => {
+        const x = Math.sin(phase * 12.9898 + seed * 78.233) * 43758.5453;
+        return x - Math.floor(x);
+      };
       const rec: NodeRecord = {
         id: node.id,
+        group: cluster.id,
         clickable: node.clickable,
         label,
         baseScale: label.userData.baseScale as THREE.Vector3,
         baseOpacity: node.clickable ? 1 : 0.75,
         bubbleHalf: label.userData.bubbleHalf as THREE.Vector2,
         base,
-        phase: (i * 7 + j) * 1.618,
+        phase,
+        speed: new THREE.Vector3(0.75 + rand(1) * 0.6, 0.75 + rand(2) * 0.6, 0.75 + rand(3) * 0.6),
+        shown: 1,
       };
       nodes.push(rec);
       nodeById.set(node.id, rec);
@@ -362,6 +395,12 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
 
   /** Run the link from pill edge to pill edge rather than centre to centre, as seen from the camera. */
   function trimLink(l: { a: NodeRecord; b: NodeRecord; line: LinkLine }) {
+    const shown = Math.min(l.a.shown, l.b.shown);
+    (l.line.line.material as THREE.LineDashedMaterial).opacity = LINK_OPACITY * shown;
+    if (shown <= 0) {
+      l.line.line.visible = false;
+      return;
+    }
     const A = l.a.label.position;
     const B = l.b.label.position;
     viewA.copy(A).applyMatrix4(camera.matrixWorldInverse);
@@ -395,17 +434,45 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
   function applySelectionVisuals() {
     for (const n of nodes) {
       const on = n.id === selectedId;
-      n.label.scale.copy(n.baseScale).multiplyScalar(on ? SELECTED_SCALE : 1);
       const { resting, selected } = n.label.userData.textures as Record<string, THREE.Texture>;
       (n.label.material as THREE.SpriteMaterial).map = on ? selected : resting;
     }
   }
 
   /** Distance at which a sphere of `radius` fits the current viewport on both axes. */
+  // ---------------------------------------------------------------- projection
+  // The canvas never resizes for the panel. Instead the camera renders a
+  // window onto a larger virtual image whose centre sits in the middle of the
+  // uncovered area (setViewOffset), keeping the same pixel scale.
+  let canvasW = 1;
+  let canvasH = 1;
+  /** tan(vertical half-FOV) for the full canvas. */
+  let baseVTan = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2));
+  const inset = { right: 0, bottom: 0 };
+  const insetTarget = { right: 0, bottom: 0 };
+  let insetAnim: { start: number; right: number; bottom: number } | null = null;
+
+  function applyProjection() {
+    const fullW = canvasW + inset.right;
+    const fullH = canvasH + inset.bottom;
+    camera.aspect = fullW / fullH;
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan((baseVTan * fullH) / canvasH));
+    if (inset.right || inset.bottom) camera.setViewOffset(fullW, fullH, inset.right, inset.bottom, canvasW, canvasH);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+  }
+
+  /** Half-angles of the area the panel leaves visible, once the panel has finished moving. */
+  function visibleHalfAngles() {
+    const v = Math.atan((baseVTan * (canvasH - insetTarget.bottom)) / canvasH);
+    const h = Math.atan((baseVTan * (canvasW - insetTarget.right)) / canvasH);
+    return { v, h };
+  }
+
+  /** Distance at which a sphere of `radius` fits the visible area on both axes. */
   function fitDistance(radius: number): number {
-    const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
-    const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
-    const d = radius / Math.sin(Math.min(vHalf, hHalf));
+    const { v, h } = visibleHalfAngles();
+    const d = radius / Math.sin(Math.min(v, h));
     return THREE.MathUtils.clamp(d, controls.minDistance, controls.maxDistance);
   }
 
@@ -445,13 +512,11 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
   }
 
   // Radius of the whole graph on the ground plane: ring, group spread, outward push, label room.
-  const graphRadius = ringRadius + NODE_RADIUS + 0.45 + 0.4;
+  const graphRadius = ringRadius + Math.max(0, ...clusters.map((c) => groupRadius(c.children.length))) + 0.45 + 0.4;
 
   /** Home distance: the default view, or further back if the ring wouldn't fit the canvas width. */
   function homeDistance(): number {
-    const vHalf = THREE.MathUtils.degToRad(camera.fov / 2);
-    const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
-    const fitWidth = graphRadius / Math.sin(hHalf);
+    const fitWidth = graphRadius / Math.sin(visibleHalfAngles().h);
     return THREE.MathUtils.clamp(
       Math.max(HOME_POSITION.distanceTo(HOME_TARGET), fitWidth),
       controls.minDistance,
@@ -478,8 +543,11 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
     ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
     // Sprites are hit across their whole quad, so the full label is the click target.
-    const hit = raycaster.intersectObjects(clickableLabels, false)[0];
-    return hit ? (nodeById.get(hit.object.userData.id as string) ?? null) : null;
+    for (const hit of raycaster.intersectObjects(clickableLabels, false)) {
+      const n = nodeById.get(hit.object.userData.id as string);
+      if (n && n.shown > 0.5) return n; // hidden groups can't be clicked
+    }
+    return null;
   }
 
   const onPointerDown = (e: PointerEvent) => {
@@ -507,12 +575,12 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
     const h = host.clientHeight;
     if (w === 0 || h === 0) return;
     renderer.setSize(w, h, false);
-    camera.aspect = w / h;
+    canvasW = w;
+    canvasH = h;
     // Keep the horizontal view at least as wide as a square canvas's would be.
     const baseTan = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2));
-    const vTan = Math.max(baseTan, baseTan / camera.aspect);
-    camera.fov = Math.min(MAX_FOV, THREE.MathUtils.radToDeg(2 * Math.atan(vTan)));
-    camera.updateProjectionMatrix();
+    baseVTan = Math.min(Math.max(baseTan, baseTan / (w / h)), Math.tan(THREE.MathUtils.degToRad(MAX_FOV / 2)));
+    applyProjection();
     if (atHome) {
       const dir = camera.position.clone().sub(controls.target).normalize();
       camera.position.copy(controls.target).addScaledVector(dir, homeDistance());
@@ -523,19 +591,30 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
   resizeObserver.observe(host);
 
   // ---------------------------------------------------------------- loop
+  let lastFrame = 0;
+  const hiddenGroups = new Set<string>();
   const easeInOutCubic = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 
   function renderFrame(now: number) {
     const t = now / 1000;
+    const tb = t * BOB_SPEED;
 
     if (!reducedMotion) {
       for (const n of nodes) {
         n.label.position.set(
-          n.base.x + Math.sin(t * 0.35 + n.phase) * 0.09,
-          n.base.y + Math.cos(t * 0.29 + n.phase) * 0.09,
-          n.base.z + Math.sin(t * 0.23 + n.phase) * 0.09,
+          n.base.x + Math.sin(tb * 0.35 * n.speed.x + n.phase) * BOB_AMPLITUDE,
+          n.base.y + Math.cos(tb * 0.29 * n.speed.y + n.phase) * BOB_AMPLITUDE,
+          n.base.z + Math.sin(tb * 0.23 * n.speed.z + n.phase) * BOB_AMPLITUDE,
         );
       }
+    }
+
+    if (insetAnim) {
+      const k = easeInOutCubic(Math.min(1, (now - insetAnim.start) / INSET_MS));
+      inset.right = THREE.MathUtils.lerp(insetAnim.right, insetTarget.right, k);
+      inset.bottom = THREE.MathUtils.lerp(insetAnim.bottom, insetTarget.bottom, k);
+      if (k >= 1) insetAnim = null;
+      applyProjection();
     }
 
     if (tween) {
@@ -546,11 +625,22 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
     camera.updateMatrixWorld();
     for (const l of links) trimLink(l);
 
+    const fadeStep = lastFrame ? (now - lastFrame) / FADE_MS : 1;
+    lastFrame = now;
     for (const n of nodes) {
+      const target = hiddenGroups.has(n.group) ? 0 : 1;
+      if (n.shown !== target) {
+        n.shown = reducedMotion ? target : THREE.MathUtils.clamp(n.shown + Math.sign(target - n.shown) * fadeStep, 0, 1);
+      }
+      n.label.visible = n.shown > 0;
+      if (!n.label.visible) continue;
+      const on = n.id === selectedId;
+      // Hidden groups shrink a little as they fade, so they recede rather than just vanish.
+      n.label.scale.copy(n.baseScale).multiplyScalar((on ? SELECTED_SCALE : 1) * (0.7 + 0.3 * n.shown));
       const d = n.label.position.distanceTo(camera.position);
-      const fade = n.id === selectedId ? 1 : THREE.MathUtils.clamp(1.8 - d / 22, 0.15, 1) * n.baseOpacity;
-      const dim = selectedId && n.id !== selectedId ? UNSELECTED_DIM : 1;
-      (n.label.material as THREE.SpriteMaterial).opacity = fade * dim;
+      const fade = on ? 1 : THREE.MathUtils.clamp(1.8 - d / 22, 0.15, 1) * n.baseOpacity;
+      const dim = selectedId && !on ? UNSELECTED_DIM : 1;
+      (n.label.material as THREE.SpriteMaterial).opacity = fade * dim * n.shown;
     }
 
     renderer.render(scene, camera);
@@ -593,6 +683,25 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
     recentre() {
       driftKilled = false;
       startTween(HOME_TARGET, HOME_POSITION.clone().sub(HOME_TARGET), homeDistance, true);
+    },
+
+    setHiddenGroups(ids, instant = false) {
+      hiddenGroups.clear();
+      for (const id of ids) hiddenGroups.add(id);
+      if (instant) for (const n of nodes) n.shown = hiddenGroups.has(n.group) ? 0 : 1;
+    },
+
+    setInsets(right, bottom) {
+      if (right === insetTarget.right && bottom === insetTarget.bottom) return;
+      insetTarget.right = right;
+      insetTarget.bottom = bottom;
+      if (reducedMotion) {
+        inset.right = right;
+        inset.bottom = bottom;
+        applyProjection();
+      } else {
+        insetAnim = { start: performance.now(), right: inset.right, bottom: inset.bottom };
+      }
     },
 
     dispose() {

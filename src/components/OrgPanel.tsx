@@ -1,13 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type Ref } from 'react';
 import { CLUSTERS_BY_ID, ORGS_BY_ID, type Org } from '../data/orgs';
 
 interface Props {
   org: Org | null;
   onClose: () => void;
   onSelect: (id: string) => void;
+  ref?: Ref<HTMLElement>;
 }
 
-export function OrgPanel({ org: current, onClose, onSelect }: Props) {
+export function OrgPanel({ org: current, onClose, onSelect, ref }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Keep showing the last org while the panel animates closed.
   const lastRef = useRef(current);
@@ -22,7 +23,7 @@ export function OrgPanel({ org: current, onClose, onSelect }: Props) {
   const cluster = org ? CLUSTERS_BY_ID.get(org.cluster) : undefined;
 
   return (
-    <aside className="panel" aria-label="Organisation details" aria-hidden={!current} inert={!current}>
+    <aside ref={ref} className="panel" aria-label="Organisation details" aria-hidden={!current} inert={!current}>
       <div className="panel__inner" ref={scrollRef}>
         {org && info && cluster && (
           <article>

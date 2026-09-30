@@ -1,16 +1,45 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { ConstellationGraph, type ConstellationHandle } from './constellation/ConstellationGraph';
 import { OrgPanel } from './components/OrgPanel';
-import { CLUSTERS, GRAPH, ORGS, ORGS_BY_ID } from './data/orgs';
+import { CLUSTERS, GRAPH, ORGS, ORGS_BY_ID, type ClusterId } from './data/orgs';
 
 export default function App() {
   const graphRef = useRef<ConstellationHandle>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hiddenGroups, setHiddenGroups] = useState<ClusterId[]>([]);
   const selected = selectedId ? (ORGS_BY_ID.get(selectedId) ?? null) : null;
+  const open = selected !== null;
+
+  // The panel slides over the map rather than squeezing it, so tell the map
+  // how much of it the panel covers: its width beside the map, or its height
+  // as a bottom sheet on narrow screens (same breakpoint as app.css).
+  const panelRef = useRef<HTMLElement>(null);
+  const [insets, setInsets] = useState({ right: 0, bottom: 0 });
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const measure = () => {
+      const sheet = window.matchMedia('(max-width: 720px)').matches;
+      setInsets(
+        !open ? { right: 0, bottom: 0 } : sheet ? { right: 0, bottom: el.offsetHeight } : { right: el.offsetWidth, bottom: 0 },
+      );
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open]);
 
   const select = useCallback((id: string | null) => {
     setSelectedId(id && ORGS_BY_ID.get(id)?.info ? id : null);
   }, []);
+
+  const toggleGroup = (id: ClusterId) => {
+    const hiding = !hiddenGroups.includes(id);
+    setHiddenGroups(hiding ? [...hiddenGroups, id] : hiddenGroups.filter((g) => g !== id));
+    // Close the panel if its org just disappeared.
+    if (hiding && selected?.cluster === id) setSelectedId(null);
+  };
 
   const recentre = () => {
     setSelectedId(null);
@@ -26,17 +55,34 @@ export default function App() {
   }, []);
 
   return (
-    <main className="stage" data-open={selected ? '' : undefined}>
+    <main className="stage" data-open={open ? '' : undefined}>
       <div className="stage__canvas">
-        <ConstellationGraph ref={graphRef} clusters={GRAPH} selectedId={selectedId} onSelect={select} />
+        <ConstellationGraph
+          ref={graphRef}
+          clusters={GRAPH}
+          selectedId={selectedId}
+          onSelect={select}
+          insetRight={insets.right}
+          insetBottom={insets.bottom}
+          hiddenGroups={hiddenGroups}
+        />
 
         <header className="stage__title">
-          <h1>Who Works on What in AI Safety</h1>
-          <ul className="stage__legend" aria-label="Colour key">
+          <h1>Who Works on What</h1>
+          <p>Browse orgs operating in AI Safety: in-depth info about their purpose, track record, and open priorities. Filter based on your interest. </p>
+          <ul className="stage__filters" aria-label="Show groups">
             {CLUSTERS.map((c) => (
               <li key={c.id}>
-                <span className="stage__swatch" style={{ background: `var(${c.colorVar})` }} />
-                {c.label}
+                <button
+                  type="button"
+                  className="stage__chip"
+                  aria-pressed={!hiddenGroups.includes(c.id)}
+                  onClick={() => toggleGroup(c.id)}
+                  style={{ '--chip': `var(${c.colorVar})` } as CSSProperties}
+                >
+                  <span className="stage__swatch" />
+                  {c.label}
+                </button>
               </li>
             ))}
           </ul>
@@ -53,7 +99,7 @@ export default function App() {
         <nav className="stage__index" aria-label="Organisations">
           {CLUSTERS.map((c) => {
             const orgs = ORGS.filter((o) => o.cluster === c.id && o.info);
-            if (orgs.length === 0) return null;
+            if (orgs.length === 0 || hiddenGroups.includes(c.id)) return null;
             return (
               <div key={c.id}>
                 <p>{c.label}</p>
@@ -72,7 +118,7 @@ export default function App() {
         </nav>
       </div>
 
-      <OrgPanel org={selected} onClose={() => setSelectedId(null)} onSelect={select} />
+      <OrgPanel ref={panelRef} org={selected} onClose={() => setSelectedId(null)} onSelect={select} />
   </main>
   );
 }

@@ -38,7 +38,7 @@ export interface Org {
   links?: OrgLink[];
 }
 
-export type ClusterId = 'evals' | 'alignment' | 'governance' | 'labs';
+export type ClusterId = 'nonprofit' | 'forprofit' | 'government' | 'labs';
 
 export interface Cluster {
   id: ClusterId;
@@ -46,36 +46,21 @@ export interface Cluster {
   colorVar: string;
 }
 
+/** Groups, in ring order. Add a group here, give it a colour token in tokens.css, then assign orgs to it. */
 export const CLUSTERS: Cluster[] = [
-  {
-    id: 'evals',
-    label: 'Evaluations',
-    colorVar: '--cluster-evals',
-  },
-  {
-    id: 'alignment',
-    label: 'Alignment',
-    colorVar: '--cluster-alignment',
-  },
-  {
-    id: 'governance',
-    label: 'Governance',
-    colorVar: '--cluster-governance',
-  },
-  {
-    id: 'labs',
-    label: 'Frontier labs',
-    colorVar: '--cluster-labs',
-  },
+  { id: 'nonprofit', label: 'Non-profits', colorVar: '--cluster-nonprofit' },
+  { id: 'forprofit', label: 'For-profits', colorVar: '--cluster-forprofit' },
+  { id: 'labs', label: 'Frontier labs', colorVar: '--cluster-labs' },
+  { id: 'government', label: 'Government', colorVar: '--cluster-government' },
 ];
 
 export const ORGS: Org[] = [
-  // ---------------------------------------------------------------- Evaluations
+  // ------------------------------------------------------------- Non-profits
   {
     id: 'metr',
     name: 'METR',
     logo: '/logos/metr.png',
-    cluster: 'evals',
+    cluster: 'nonprofit',
     links: [{ to: 'arc', note: 'Began as ARC Evals before spinning out.' }],
     info: {
       tagline: 'Model Evaluation & Threat Research: measuring how far AI systems can act on their own.',
@@ -99,7 +84,7 @@ export const ORGS: Org[] = [
     name: 'Apollo Research',
     logo: '/logos/apollo.png',
     label: 'Apollo Research',
-    cluster: 'evals',
+    cluster: 'nonprofit',
     info: {
       tagline: 'Evaluating whether AI systems will deceive the people overseeing them.',
       founded: '2023',
@@ -121,7 +106,7 @@ export const ORGS: Org[] = [
     id: 'palisade',
     name: 'Palisade Research',
     logo: '/logos/palisade.png',
-    cluster: 'evals',
+    cluster: 'nonprofit',
     info: {
       tagline: 'Concrete demonstrations of dangerous AI capabilities, built for decision-makers.',
       founded: '2023',
@@ -140,33 +125,10 @@ export const ORGS: Org[] = [
     },
   },
   {
-    id: 'grayswan',
-    name: 'Gray Swan AI',
-    logo: '/logos/grayswan.png',
-    cluster: 'evals',
-    info: {
-      tagline: 'AI security: red-teaming, robustness and safeguards for deployed models.',
-      founded: '2024',
-      url: 'https://www.grayswan.ai',
-      sections: [
-        {
-          heading: 'What they do',
-          body: 'Founded by Carnegie Mellon researchers whose earlier work includes automated jailbreak attacks on language models, Gray Swan builds tools to find and fix vulnerabilities in AI systems and agents.',
-        },
-        {
-          heading: 'Notable work',
-          body: 'The Gray Swan Arena runs public red-teaming competitions, often co-sponsored by frontier labs and government institutes, in which thousands of participants try to break model safeguards. The company also develops defences such as circuit breakers, which interrupt harmful outputs at the representation level.',
-        },
-      ],
-    },
-  },
-
-  // ------------------------------------------------------------------ Alignment
-  {
     id: 'redwood',
     name: 'Redwood Research',
     logo: '/logos/redwood.png',
-    cluster: 'alignment',
+    cluster: 'nonprofit',
     info: {
       tagline: 'Keeping AI safe even if it is trying not to be.',
       founded: '2021',
@@ -188,7 +150,7 @@ export const ORGS: Org[] = [
     id: 'arc',
     name: 'Alignment Research Center',
     label: 'ARC',
-    cluster: 'alignment',
+    cluster: 'nonprofit',
     links: [{ to: 'metr', note: 'Its evaluations team became METR.' }],
     info: {
       tagline: 'Theoretical alignment research aimed at methods that scale to superhuman systems.',
@@ -212,7 +174,7 @@ export const ORGS: Org[] = [
     name: 'Machine Intelligence Research Institute',
     logo: '/logos/miri.png',
     label: 'MIRI',
-    cluster: 'alignment',
+    cluster: 'nonprofit',
     info: {
       tagline: 'The field’s oldest organisation, now arguing for an international halt on frontier development.',
       founded: '2000',
@@ -235,7 +197,7 @@ export const ORGS: Org[] = [
     name: 'Center for Human-Compatible AI',
     logo: '/logos/chai.png',
     label: 'CHAI',
-    cluster: 'alignment',
+    cluster: 'nonprofit',
     info: {
       tagline: 'An academic centre at UC Berkeley rethinking how AI systems pursue objectives.',
       founded: '2016',
@@ -257,7 +219,7 @@ export const ORGS: Org[] = [
     id: 'far',
     name: 'FAR.AI',
     logo: '/logos/far.png',
-    cluster: 'alignment',
+    cluster: 'nonprofit',
     info: {
       tagline: 'A research and field-building nonprofit working on robustness and alignment.',
       founded: '2022',
@@ -276,32 +238,9 @@ export const ORGS: Org[] = [
     },
   },
   {
-    id: 'goodfire',
-    name: 'Goodfire',
-    logo: '/logos/goodfire.png',
-    cluster: 'alignment',
-    links: [{ to: 'anthropic', note: 'Anthropic invested in its 2025 Series A.' }],
-    info: {
-      tagline: 'A company building interpretability into a practical engineering tool.',
-      founded: '2024',
-      base: 'San Francisco, CA',
-      url: 'https://www.goodfire.ai',
-      sections: [
-        {
-          heading: 'What they do',
-          body: 'Goodfire applies mechanistic interpretability commercially: decomposing a model’s internals into human-readable features, then using those features to understand, debug and steer model behaviour.',
-        },
-        {
-          heading: 'Notable work',
-          body: 'It released Ember, an API for feature-level inspection and steering, along with open sparse autoencoders for open-weight models. Its 2025 Series A was one of the largest raises for a dedicated interpretability company.',
-        },
-      ],
-    },
-  },
-  {
     id: 'transluce',
     name: 'Transluce',
-    cluster: 'alignment',
+    cluster: 'nonprofit',
     info: {
       tagline: 'A nonprofit lab building open, scalable tools for understanding AI systems.',
       founded: '2024',
@@ -323,7 +262,7 @@ export const ORGS: Org[] = [
     id: 'timaeus',
     name: 'Timaeus',
     logo: '/logos/timaeus.png',
-    cluster: 'alignment',
+    cluster: 'nonprofit',
     info: {
       tagline: 'Developmental interpretability, grounded in singular learning theory.',
       founded: '2023',
@@ -341,35 +280,11 @@ export const ORGS: Org[] = [
     },
   },
   {
-    id: 'conjecture',
-    name: 'Conjecture',
-    logo: '/logos/conjecture.png',
-    cluster: 'alignment',
-    info: {
-      tagline: 'A London startup pursuing bounded, understandable AI systems.',
-      founded: '2022',
-      base: 'London, UK',
-      url: 'https://www.conjecture.dev',
-      sections: [
-        {
-          heading: 'What they do',
-          body: 'Co-founded by Connor Leahy, previously a co-founder of EleutherAI, Conjecture proposes “cognitive emulation”: building systems whose reasoning mirrors human reasoning closely enough to be understood and bounded, instead of scaling opaque general agents.',
-        },
-        {
-          heading: 'Position',
-          body: 'Its leadership is outspoken about extinction risk and has been active in public advocacy for binding limits on frontier AI development.',
-        },
-      ],
-    },
-  },
-
-  // ----------------------------------------------------------------- Governance
-  {
     id: 'cais',
     name: 'Center for AI Safety',
     logo: '/logos/cais.png',
     label: 'CAIS',
-    cluster: 'governance',
+    cluster: 'nonprofit',
     info: {
       tagline: 'Research, field-building and advocacy to reduce societal-scale risks from AI.',
       founded: '2022',
@@ -392,7 +307,7 @@ export const ORGS: Org[] = [
     name: 'Centre for the Governance of AI',
     logo: '/logos/govai.png',
     label: 'GovAI',
-    cluster: 'governance',
+    cluster: 'nonprofit',
     info: {
       tagline: 'Research to help decision-makers navigate the transition to advanced AI.',
       founded: '2018 (independent since 2021)',
@@ -410,57 +325,10 @@ export const ORGS: Org[] = [
     },
   },
   {
-    id: 'uk-aisi',
-    name: 'UK AI Security Institute',
-    logo: '/logos/uk-aisi.png',
-    label: 'UK AISI',
-    cluster: 'governance',
-    links: [{ to: 'us-caisi', note: 'Ran joint pre-deployment tests with its US counterpart.' }],
-    info: {
-      tagline: 'The UK government’s technical body for testing frontier AI.',
-      founded: '2023 (renamed 2025)',
-      base: 'London, UK',
-      url: 'https://www.aisi.gov.uk',
-      sections: [
-        {
-          heading: 'What they do',
-          body: 'Created around the 2023 Bletchley Park summit as the AI Safety Institute and renamed the AI Security Institute in 2025, AISI sits in the Department for Science, Innovation and Technology. It evaluates frontier models before and after release, focusing on national-security risks.',
-        },
-        {
-          heading: 'Notable work',
-          body: 'It maintains Inspect, an open-source framework for model evaluations that is widely used across the field, and funds external alignment and security research through grant programmes.',
-        },
-      ],
-    },
-  },
-  {
-    id: 'us-caisi',
-    name: 'US Center for AI Standards and Innovation',
-    label: 'US CAISI',
-    cluster: 'governance',
-    links: [{ to: 'uk-aisi', note: 'Ran joint pre-deployment tests with the UK institute.' }],
-    info: {
-      tagline: 'The US government’s point of contact with industry on AI testing and standards.',
-      founded: '2025 (successor to US AISI, 2023)',
-      base: 'NIST, US Dept. of Commerce',
-      url: 'https://www.nist.gov/caisi',
-      sections: [
-        {
-          heading: 'What they do',
-          body: 'CAISI replaced the US AI Safety Institute at NIST in 2025. It develops voluntary standards and agreements with AI developers and evaluates models for demonstrable national-security risks such as cyber, biological and chemical capabilities.',
-        },
-        {
-          heading: 'Notable work',
-          body: 'Beyond testing US frontier models, it evaluates foreign AI systems, for example assessing the capabilities and security of DeepSeek’s models compared with US ones.',
-        },
-      ],
-    },
-  },
-  {
     id: 'epoch',
     name: 'Epoch AI',
     logo: '/logos/epoch.png',
-    cluster: 'governance',
+    cluster: 'nonprofit',
     info: {
       tagline: 'Data and forecasts on the trajectory of AI.',
       founded: '2022',
@@ -481,7 +349,7 @@ export const ORGS: Org[] = [
     id: 'ai-futures',
     name: 'AI Futures Project',
     logo: '/logos/ai-futures.png',
-    cluster: 'governance',
+    cluster: 'nonprofit',
     links: [{ to: 'openai', note: 'Founded by former OpenAI researcher Daniel Kokotajlo.' }],
     info: {
       tagline: 'Forecasting the trajectory of AI, one concrete scenario at a time.',
@@ -504,7 +372,7 @@ export const ORGS: Org[] = [
     id: 'mats',
     name: 'MATS',
     logo: '/logos/mats.png',
-    cluster: 'governance',
+    cluster: 'nonprofit',
     info: {
       tagline: 'ML Alignment & Theory Scholars: the field’s largest research training programme.',
       founded: '2021',
@@ -523,7 +391,124 @@ export const ORGS: Org[] = [
     },
   },
 
-  // --------------------------------------------------------------- Frontier labs
+  // ------------------------------------------------------------- For-profits
+  {
+    id: 'goodfire',
+    name: 'Goodfire',
+    logo: '/logos/goodfire.png',
+    cluster: 'forprofit',
+    links: [{ to: 'anthropic', note: 'Anthropic invested in its 2025 Series A.' }],
+    info: {
+      tagline: 'A company building interpretability into a practical engineering tool.',
+      founded: '2024',
+      base: 'San Francisco, CA',
+      url: 'https://www.goodfire.ai',
+      sections: [
+        {
+          heading: 'What they do',
+          body: 'Goodfire applies mechanistic interpretability commercially: decomposing a model’s internals into human-readable features, then using those features to understand, debug and steer model behaviour.',
+        },
+        {
+          heading: 'Notable work',
+          body: 'It released Ember, an API for feature-level inspection and steering, along with open sparse autoencoders for open-weight models. Its 2025 Series A was one of the largest raises for a dedicated interpretability company.',
+        },
+      ],
+    },
+  },
+  {
+    id: 'grayswan',
+    name: 'Gray Swan AI',
+    logo: '/logos/grayswan.png',
+    cluster: 'forprofit',
+    info: {
+      tagline: 'AI security: red-teaming, robustness and safeguards for deployed models.',
+      founded: '2024',
+      url: 'https://www.grayswan.ai',
+      sections: [
+        {
+          heading: 'What they do',
+          body: 'Founded by Carnegie Mellon researchers whose earlier work includes automated jailbreak attacks on language models, Gray Swan builds tools to find and fix vulnerabilities in AI systems and agents.',
+        },
+        {
+          heading: 'Notable work',
+          body: 'The Gray Swan Arena runs public red-teaming competitions, often co-sponsored by frontier labs and government institutes, in which thousands of participants try to break model safeguards. The company also develops defences such as circuit breakers, which interrupt harmful outputs at the representation level.',
+        },
+      ],
+    },
+  },
+  {
+    id: 'conjecture',
+    name: 'Conjecture',
+    logo: '/logos/conjecture.png',
+    cluster: 'forprofit',
+    info: {
+      tagline: 'A London startup pursuing bounded, understandable AI systems.',
+      founded: '2022',
+      base: 'London, UK',
+      url: 'https://www.conjecture.dev',
+      sections: [
+        {
+          heading: 'What they do',
+          body: 'Co-founded by Connor Leahy, previously a co-founder of EleutherAI, Conjecture proposes “cognitive emulation”: building systems whose reasoning mirrors human reasoning closely enough to be understood and bounded, instead of scaling opaque general agents.',
+        },
+        {
+          heading: 'Position',
+          body: 'Its leadership is outspoken about extinction risk and has been active in public advocacy for binding limits on frontier AI development.',
+        },
+      ],
+    },
+  },
+
+  // -------------------------------------------------------------- Government
+  {
+    id: 'uk-aisi',
+    name: 'UK AI Security Institute',
+    logo: '/logos/uk-aisi.png',
+    label: 'UK AISI',
+    cluster: 'government',
+    links: [{ to: 'us-caisi', note: 'Ran joint pre-deployment tests with its US counterpart.' }],
+    info: {
+      tagline: 'The UK government’s technical body for testing frontier AI.',
+      founded: '2023 (renamed 2025)',
+      base: 'London, UK',
+      url: 'https://www.aisi.gov.uk',
+      sections: [
+        {
+          heading: 'What they do',
+          body: 'Created around the 2023 Bletchley Park summit as the AI Safety Institute and renamed the AI Security Institute in 2025, AISI sits in the Department for Science, Innovation and Technology. It evaluates frontier models before and after release, focusing on national-security risks.',
+        },
+        {
+          heading: 'Notable work',
+          body: 'It maintains Inspect, an open-source framework for model evaluations that is widely used across the field, and funds external alignment and security research through grant programmes.',
+        },
+      ],
+    },
+  },
+  {
+    id: 'us-caisi',
+    name: 'US Center for AI Standards and Innovation',
+    label: 'US CAISI',
+    cluster: 'government',
+    links: [{ to: 'uk-aisi', note: 'Ran joint pre-deployment tests with the UK institute.' }],
+    info: {
+      tagline: 'The US government’s point of contact with industry on AI testing and standards.',
+      founded: '2025 (successor to US AISI, 2023)',
+      base: 'NIST, US Dept. of Commerce',
+      url: 'https://www.nist.gov/caisi',
+      sections: [
+        {
+          heading: 'What they do',
+          body: 'CAISI replaced the US AI Safety Institute at NIST in 2025. It develops voluntary standards and agreements with AI developers and evaluates models for demonstrable national-security risks such as cyber, biological and chemical capabilities.',
+        },
+        {
+          heading: 'Notable work',
+          body: 'Beyond testing US frontier models, it evaluates foreign AI systems, for example assessing the capabilities and security of DeepSeek’s models compared with US ones.',
+        },
+      ],
+    },
+  },
+
+  // ----------------------------------------------------------- Frontier labs
   {
     id: 'openai',
     name: 'OpenAI',

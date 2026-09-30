@@ -43,8 +43,8 @@
 
   /* ---------- Map groups ----------
      Which palette colour marks each group of orgs on the map (and in the panel). */
-  --cluster-evals:      var(--color-accent);
-  --cluster-alignment:  var(--color-hard);
-  --cluster-governance: var(--color-model);
+  --cluster-nonprofit:  var(--color-hard);
+  --cluster-forprofit:  var(--color-accent);
+  --cluster-government: var(--color-model);
   --cluster-labs:       var(--color-muted);
 }

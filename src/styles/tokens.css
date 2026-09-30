@@ -1,0 +1,50 @@
+/* Juniper Research — style tokens
+   Transcribed from the :root block of the /map page via DevTools.
+   Font NAMES are not yet identified: the site self-hosts them under
+   aliases (e.g. "fontBody"), so the real families are still TBD. */
+
+:root {
+  /* ---------- Colors ---------- */
+  --color-ground:  #f8f8f8; /* page background */
+  --color-surface: #fbfdf9; /* cards / panels (faint green-white) */
+  --color-ink:     #141612; /* primary text */
+  --color-muted:   #555d54; /* secondary text */
+  --color-rule:    #cdd1c9; /* borders, dividers */
+  --color-accent:  #7a4a12; /* bronze accent */
+  --color-hard:    #0a2c27; /* deep green, strong emphasis */
+  --color-model:   #14426e; /* navy, likely a map category */
+
+  /* ---------- Font sources (placeholders until the real families are known) ----------
+     These must be defined: an undefined var() inside the font stacks below makes
+     the whole declaration invalid, and the fallbacks never apply. */
+  --font-display-src: "Iowan Old Style";
+  --font-body-src:    "Charter";
+  --font-utility-src: "Inter";
+
+  /* ---------- Font roles ---------- */
+  /* display = headlines ("Follow the work.")          -> serif, TBD
+     body    = paragraphs ("The ecosystem organized…") -> serif, TBD (alias: fontBody)
+     utility = nav, buttons, labels, card titles       -> sans, TBD */
+  --font-display: var(--font-display-src), Georgia, serif;
+  --font-body:    var(--font-body-src), Georgia, serif;
+  --font-utility: var(--font-utility-src), ui-sans-serif, system-ui, sans-serif;
+
+  /* ---------- Type scale (size / line-height) ---------- */
+  --text-display-1: 4.5rem;     --text-display-1--line-height: 1.02;
+  --text-display-2: 3rem;       --text-display-2--line-height: 1.08;
+  --text-display-3: 2rem;       --text-display-3--line-height: 1.15;
+  --text-title:     1.5rem;     --text-title--line-height: 1.25;
+  --text-subtitle:  1.25rem;    --text-subtitle--line-height: 1.4;
+  --text-body:      1.125rem;   --text-body--line-height: 1.65;
+  --text-body-dense: 1.0625rem; --text-body-dense--line-height: 1.6;
+  --text-small:     1rem;       --text-small--line-height: 1.5;
+  --text-caption:   0.875rem;   --text-caption--line-height: 1.45;
+  --text-micro:     0.75rem;    /* line-height not captured */
+
+  /* ---------- Map groups ----------
+     Which palette colour marks each group of orgs on the map (and in the panel). */
+  --cluster-evals:      var(--color-accent);
+  --cluster-alignment:  var(--color-hard);
+  --cluster-governance: var(--color-model);
+  --cluster-labs:       var(--color-muted);
+}

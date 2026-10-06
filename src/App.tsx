@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { ConstellationGraph, type ConstellationHandle } from './constellation/ConstellationGraph';
+import { LayerIcon } from './components/LayerIcon';
 import { OrgPanel } from './components/OrgPanel';
-import { CLUSTERS, GRAPH, ORGS, ORGS_BY_ID, type ClusterId } from './data/orgs';
+import { CLUSTERS, GRAPH, LAYERS, ORGS, ORGS_BY_ID, type ClusterId, type LayerId, type Org } from './data/orgs';
 
 export default function App() {
   const graphRef = useRef<ConstellationHandle>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hiddenGroups, setHiddenGroups] = useState<ClusterId[]>([]);
+  const [hiddenLayers, setHiddenLayers] = useState<LayerId[]>([]);
+  // Same rule as the map: type chip on, and (if tagged) at least one of its layers on.
+  const isVisible = (o: Org, groups = hiddenGroups, layers = hiddenLayers) =>
+    !groups.includes(o.cluster) && (!o.layers?.length || o.layers.some((l) => !layers.includes(l)));
   const selected = selectedId ? (ORGS_BY_ID.get(selectedId) ?? null) : null;
   const open = selected !== null;
 
@@ -30,15 +35,34 @@ export default function App() {
     return () => ro.disconnect();
   }, [open]);
 
+  // The title block sits over the top of the map; centre the graph in the space below it.
+  const titleRef = useRef<HTMLElement>(null);
+  const [titleInset, setTitleInset] = useState(0);
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    const measure = () => setTitleInset(el.offsetTop + el.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const select = useCallback((id: string | null) => {
     setSelectedId(id && ORGS_BY_ID.get(id)?.info ? id : null);
   }, []);
 
   const toggleGroup = (id: ClusterId) => {
-    const hiding = !hiddenGroups.includes(id);
-    setHiddenGroups(hiding ? [...hiddenGroups, id] : hiddenGroups.filter((g) => g !== id));
+    const next = hiddenGroups.includes(id) ? hiddenGroups.filter((g) => g !== id) : [...hiddenGroups, id];
+    setHiddenGroups(next);
     // Close the panel if its org just disappeared.
-    if (hiding && selected?.cluster === id) setSelectedId(null);
+    if (selected && !isVisible(selected, next)) setSelectedId(null);
+  };
+
+  const toggleLayer = (id: LayerId) => {
+    const next = hiddenLayers.includes(id) ? hiddenLayers.filter((l) => l !== id) : [...hiddenLayers, id];
+    setHiddenLayers(next);
+    if (selected && !isVisible(selected, hiddenGroups, next)) setSelectedId(null);
   };
 
   const recentre = () => {
@@ -64,10 +88,12 @@ export default function App() {
           onSelect={select}
           insetRight={insets.right}
           insetBottom={insets.bottom}
+          insetTop={titleInset}
           hiddenGroups={hiddenGroups}
+          hiddenLayers={hiddenLayers}
         />
 
-        <header className="stage__title">
+        <header ref={titleRef} className="stage__title">
           <h1>Who Works on What</h1>
           <p>Browse orgs operating in AI Safety: in-depth info about their purpose, track record, and open priorities. Filter based on your interest. </p>
           <ul className="stage__filters" aria-label="Show groups">
@@ -86,6 +112,22 @@ export default function App() {
               </li>
             ))}
           </ul>
+          <ul className="stage__filters" aria-label="Show layers">
+            {LAYERS.map((l) => (
+              <li key={l.id}>
+                <button
+                  type="button"
+                  className="stage__chip stage__chip--plain"
+                  aria-pressed={!hiddenLayers.includes(l.id)}
+                  onClick={() => toggleLayer(l.id)}
+                  title={l.sublabel}
+                >
+                  <LayerIcon id={l.id} size={14} />
+                  {l.label}
+                </button>
+              </li>
+            ))}
+          </ul>
         </header>
 
         <div className="stage__controls">
@@ -98,8 +140,8 @@ export default function App() {
         {/* Keyboard and screen-reader route to the same selections the canvas offers. */}
         <nav className="stage__index" aria-label="Organisations">
           {CLUSTERS.map((c) => {
-            const orgs = ORGS.filter((o) => o.cluster === c.id && o.info);
-            if (orgs.length === 0 || hiddenGroups.includes(c.id)) return null;
+            const orgs = ORGS.filter((o) => o.cluster === c.id && o.info && isVisible(o));
+            if (orgs.length === 0) return null;
             return (
               <div key={c.id}>
                 <p>{c.label}</p>
@@ -118,7 +160,7 @@ export default function App() {
         </nav>
       </div>
 
-      <OrgPanel ref={panelRef} org={selected} onClose={() => setSelectedId(null)} onSelect={select} />
+      <OrgPanel ref={panelRef} org={selected} onClose={() => setSelectedId(null)} />
   </main>
   );
 }

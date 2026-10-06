@@ -14,13 +14,15 @@ export interface Constellation {
   /** Restore the home camera and resume the idle drift. */
   recentre(): void;
   /**
-   * Pixels of the canvas covered by an overlay (the side panel on the right,
-   * or a bottom sheet). The view re-centres on the uncovered area, animating
-   * alongside the overlay, without resizing the canvas.
+   * Pixels of the canvas covered by overlays: the side panel on the right, a
+   * bottom sheet, the title block at the top. The view re-centres on the
+   * uncovered area, animating alongside the overlay, without resizing the canvas.
    */
-  setInsets(right: number, bottom: number): void;
+  setInsets(right: number, bottom: number, top?: number, instant?: boolean): void;
   /** Fade out every org in these groups (and their links); others fade back in. */
   setHiddenGroups(ids: string[], instant?: boolean): void;
+  /** Hide orgs all of whose layers are in this list (untagged orgs are unaffected). */
+  setHiddenLayers(ids: string[], instant?: boolean): void;
   dispose(): void;
 }
 
@@ -43,6 +45,10 @@ const TWEEN_MS = 1100;
 const BOB_AMPLITUDE = 0.22;
 /** Multiplier on the drift speed: lower is calmer. */
 const BOB_SPEED = 0.5;
+/** Peak strength of each category's nebula, whatever its size. */
+const NEBULA_OPACITY = 0.3;
+/** How far each cloud spreads beyond its group, as a multiple of the group's radius. */
+const NEBULA_SPREAD = 1.4;
 /** Fade time when a group is hidden or shown. */
 const FADE_MS = 350;
 /** Matches the panel's CSS slide: 0.45s, cubic-bezier(0.65, 0, 0.35, 1) (ease-in-out cubic). */
@@ -53,6 +59,7 @@ const CLICK_SLOP_PX = 4;
 interface NodeRecord {
   id: string;
   group: string;
+  layers: string[];
   clickable: boolean;
   label: THREE.Sprite;
   baseScale: THREE.Vector3;
@@ -130,7 +137,7 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
   controls.minDistance = 6;
   controls.maxDistance = 46;
   controls.autoRotate = !reducedMotion;
-  controls.autoRotateSpeed = 0.35;
+  controls.autoRotateSpeed = 0.2;
   controls.target.copy(HOME_TARGET);
 
   let tween: Tween | null = null;
@@ -290,7 +297,12 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
 
   // Each group gathers around an invisible centre on a ring, nudged vertically
   // so the ring is not flat. Nothing is drawn at the centre.
-  const ringRadius = 4.6 + clusters.length * 0.35;
+  // Far enough out that the two biggest groups, if neighbours, don't overlap.
+  const radii = clusters.map((c) => groupRadius(c.children.length)).sort((x, y) => y - x);
+  const ringRadius = Math.max(
+    4.6 + clusters.length * 0.35,
+    clusters.length > 1 ? ((radii[0] ?? 0) + (radii[1] ?? 0) + 1) / (2 * Math.sin(Math.PI / clusters.length)) : 0,
+  );
   clusters.forEach((cluster, i) => {
     const colorCss = cssVar(cluster.colorVar) || colors.ink;
     // Offset so the first groups in the list start nearest the camera.
@@ -329,6 +341,7 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
       const rec: NodeRecord = {
         id: node.id,
         group: cluster.id,
+        layers: node.layers ?? [],
         clickable: node.clickable,
         label,
         baseScale: label.userData.baseScale as THREE.Vector3,
@@ -342,6 +355,67 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
       nodes.push(rec);
       nodeById.set(node.id, rec);
     });
+  });
+
+  // ---------------------------------------------------------------- nebulas
+  // One nebula per category, spanning all of its orgs: a large, faint, soft
+  // disc on each org's home position, overlapping into one cloud shaped like
+  // the group. Normal (not additive) blending: on a light page, additive
+  // colour washes out to white.
+
+  const nebulaTextures = new Map<string, THREE.CanvasTexture>();
+  function softDisc(css: string): THREE.CanvasTexture {
+    let tex = nebulaTextures.get(css);
+    if (tex) return tex;
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, rgba(css, 1));
+    g.addColorStop(0.35, rgba(css, 0.7));
+    g.addColorStop(0.7, rgba(css, 0.22));
+    g.addColorStop(1, rgba(css, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    tex = track(new THREE.CanvasTexture(c));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    nebulaTextures.set(css, tex);
+    return tex;
+  }
+
+  /** Discs per cloud. Every category gets the same number, so every cloud has the same smooth texture. */
+  const NEBULA_DISCS = 32;
+  const nebulae: { members: NodeRecord[]; sprite: THREE.Sprite; opacity: number }[] = [];
+  clusters.forEach((cluster, gi) => {
+    const colorCss = cssVar(cluster.colorVar) || colors.ink;
+    const members = cluster.children.map((c) => nodeById.get(c.id)).filter((m): m is NodeRecord => !!m);
+    if (members.length === 0) return;
+    const spread = groupRadius(members.length);
+    const centre = members.reduce((acc, m) => acc.add(m.base), new THREE.Vector3()).divideScalar(members.length);
+    // Discs on each member, then fill-in discs scattered through the group's
+    // sphere (fixed seed, so the cloud is the same on every load).
+    let seed = 1 + gi * 7919;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const points = members.map((m) => m.base.clone());
+    while (points.length < NEBULA_DISCS) {
+      const v = new THREE.Vector3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1);
+      if (v.lengthSq() > 1) continue;
+      points.push(v.multiplyScalar(spread * NEBULA_SPREAD).add(centre));
+    }
+    const size = spread * 1.9 * NEBULA_SPREAD;
+    const opacity = NEBULA_OPACITY / (0.35 * points.length);
+    for (const pos of points) {
+      const mat = track(
+        new THREE.SpriteMaterial({ map: softDisc(colorCss), transparent: true, depthWrite: false, depthTest: false }),
+      );
+      const sprite = new THREE.Sprite(mat);
+      sprite.position.copy(pos);
+      sprite.scale.setScalar(size);
+      sprite.renderOrder = -5; // behind links and labels
+      scene.add(sprite);
+      nebulae.push({ members, sprite, opacity });
+    }
   });
 
   // Dashed links between orgs, deduplicated and coloured by the org they start from.
@@ -439,7 +513,6 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
     }
   }
 
-  /** Distance at which a sphere of `radius` fits the current viewport on both axes. */
   // ---------------------------------------------------------------- projection
   // The canvas never resizes for the panel. Instead the camera renders a
   // window onto a larger virtual image whose centre sits in the middle of the
@@ -448,23 +521,26 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
   let canvasH = 1;
   /** tan(vertical half-FOV) for the full canvas. */
   let baseVTan = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2));
-  const inset = { right: 0, bottom: 0 };
-  const insetTarget = { right: 0, bottom: 0 };
-  let insetAnim: { start: number; right: number; bottom: number } | null = null;
+  const inset = { right: 0, bottom: 0, top: 0 };
+  const insetTarget = { right: 0, bottom: 0, top: 0 };
+  let insetAnim: { start: number; right: number; bottom: number; top: number } | null = null;
 
   function applyProjection() {
+    // Virtual image: the canvas plus the covered strips, laid out so its
+    // centre lands in the middle of the uncovered area.
     const fullW = canvasW + inset.right;
-    const fullH = canvasH + inset.bottom;
+    const fullH = canvasH + inset.bottom + inset.top;
     camera.aspect = fullW / fullH;
     camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan((baseVTan * fullH) / canvasH));
-    if (inset.right || inset.bottom) camera.setViewOffset(fullW, fullH, inset.right, inset.bottom, canvasW, canvasH);
-    else camera.clearViewOffset();
+    if (inset.right || inset.bottom || inset.top) {
+      camera.setViewOffset(fullW, fullH, inset.right, inset.bottom, canvasW, canvasH);
+    } else camera.clearViewOffset();
     camera.updateProjectionMatrix();
   }
 
-  /** Half-angles of the area the panel leaves visible, once the panel has finished moving. */
+  /** Half-angles of the area the overlays leave visible, once they have finished moving. */
   function visibleHalfAngles() {
-    const v = Math.atan((baseVTan * (canvasH - insetTarget.bottom)) / canvasH);
+    const v = Math.atan((baseVTan * (canvasH - insetTarget.bottom - insetTarget.top)) / canvasH);
     const h = Math.atan((baseVTan * (canvasW - insetTarget.right)) / canvasH);
     return { v, h };
   }
@@ -593,6 +669,10 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
   // ---------------------------------------------------------------- loop
   let lastFrame = 0;
   const hiddenGroups = new Set<string>();
+  const hiddenLayers = new Set<string>();
+  /** Hidden if its group is off, or it has layers and every one of them is off. */
+  const isHidden = (n: NodeRecord) =>
+    hiddenGroups.has(n.group) || (n.layers.length > 0 && n.layers.every((l) => hiddenLayers.has(l)));
   const easeInOutCubic = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 
   function renderFrame(now: number) {
@@ -613,6 +693,7 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
       const k = easeInOutCubic(Math.min(1, (now - insetAnim.start) / INSET_MS));
       inset.right = THREE.MathUtils.lerp(insetAnim.right, insetTarget.right, k);
       inset.bottom = THREE.MathUtils.lerp(insetAnim.bottom, insetTarget.bottom, k);
+      inset.top = THREE.MathUtils.lerp(insetAnim.top, insetTarget.top, k);
       if (k >= 1) insetAnim = null;
       applyProjection();
     }
@@ -628,7 +709,7 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
     const fadeStep = lastFrame ? (now - lastFrame) / FADE_MS : 1;
     lastFrame = now;
     for (const n of nodes) {
-      const target = hiddenGroups.has(n.group) ? 0 : 1;
+      const target = isHidden(n) ? 0 : 1;
       if (n.shown !== target) {
         n.shown = reducedMotion ? target : THREE.MathUtils.clamp(n.shown + Math.sign(target - n.shown) * fadeStep, 0, 1);
       }
@@ -641,6 +722,14 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
       const fade = on ? 1 : THREE.MathUtils.clamp(1.8 - d / 22, 0.15, 1) * n.baseOpacity;
       const dim = selectedId && !on ? UNSELECTED_DIM : 1;
       (n.label.material as THREE.SpriteMaterial).opacity = fade * dim * n.shown;
+    }
+
+    // A category's cloud stays while any of its orgs is visible, and fades with the last one.
+    for (const nb of nebulae) {
+      let shown = 0;
+      for (const m of nb.members) if (m.shown > shown) shown = m.shown;
+      nb.sprite.visible = shown > 0;
+      (nb.sprite.material as THREE.SpriteMaterial).opacity = nb.opacity * shown;
     }
 
     renderer.render(scene, camera);
@@ -688,19 +777,26 @@ export function createConstellation(canvas: HTMLCanvasElement, opts: Constellati
     setHiddenGroups(ids, instant = false) {
       hiddenGroups.clear();
       for (const id of ids) hiddenGroups.add(id);
-      if (instant) for (const n of nodes) n.shown = hiddenGroups.has(n.group) ? 0 : 1;
+      if (instant) for (const n of nodes) n.shown = isHidden(n) ? 0 : 1;
     },
 
-    setInsets(right, bottom) {
-      if (right === insetTarget.right && bottom === insetTarget.bottom) return;
+    setHiddenLayers(ids, instant = false) {
+      hiddenLayers.clear();
+      for (const id of ids) hiddenLayers.add(id);
+      if (instant) for (const n of nodes) n.shown = isHidden(n) ? 0 : 1;
+    },
+
+    setInsets(right, bottom, top = 0, instant = false) {
+      if (right === insetTarget.right && bottom === insetTarget.bottom && top === insetTarget.top) return;
       insetTarget.right = right;
       insetTarget.bottom = bottom;
-      if (reducedMotion) {
-        inset.right = right;
-        inset.bottom = bottom;
+      insetTarget.top = top;
+      if (reducedMotion || instant) {
+        insetAnim = null;
+        Object.assign(inset, insetTarget);
         applyProjection();
       } else {
-        insetAnim = { start: performance.now(), right: inset.right, bottom: inset.bottom };
+        insetAnim = { start: performance.now(), ...inset };
       }
     },
 

@@ -5,6 +5,8 @@ export interface GraphNode {
   clickable: boolean;
   /** URL of a logo image, drawn as a round badge leading the label. */
   logo?: string;
+  /** Layer ids, for the layer filter. */
+  layers?: string[];
   /** Ids of other child nodes to join with a dashed secondary link. */
   links?: string[];
 }

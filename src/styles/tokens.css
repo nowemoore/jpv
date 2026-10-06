@@ -41,6 +41,10 @@
   --text-caption:   0.875rem;   --text-caption--line-height: 1.45;
   --text-micro:     0.75rem;    /* line-height not captured */
 
+  /* ---------- Layers ----------
+     Slate-navy used for layer labels and their pattern icons (from the layer design). */
+  --color-layer: #43507e;
+
   /* ---------- Map groups ----------
      Which palette colour marks each group of orgs on the map (and in the panel). */
   --cluster-nonprofit:  var(--color-hard);
